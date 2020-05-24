@@ -19,12 +19,10 @@ class Memory { // Handles game memory process.
 	    HANDLE hPID = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
 	    PROCESSENTRY32 procEntry;
 	    procEntry.dwSize = sizeof(procEntry);
- 
 	    const WCHAR* procNameChar;
 	    int nChars = MultiByteToWideChar(CP_ACP, 0, ProcessName, -1, NULL, 0);
 	    procNameChar = new WCHAR[nChars];
 	    MultiByteToWideChar(CP_ACP, 0, ProcessName, -1, (LPWSTR)procNameChar, nChars);
- 
 	    do
 		    if (!wcscmp(procEntry.szExeFile, procNameChar))
 		    {
@@ -42,12 +40,10 @@ class Memory { // Handles game memory process.
         HANDLE hModule = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, dwPID);
 	    MODULEENTRY32 mEntry;
 	    mEntry.dwSize = sizeof(mEntry);
- 
 	    const WCHAR *modNameChar;
             int nChars = MultiByteToWideChar(CP_ACP, 0, ModuleName, -1, NULL, 0);
             modNameChar = new WCHAR[nChars];
             MultiByteToWideChar(CP_ACP, 0, ModuleName, -1, (LPWSTR)modNameChar, nChars);
- 
 	    do
 		    if (!wcscmp(mEntry.szModule, modNameChar))
 		    {
@@ -55,12 +51,22 @@ class Memory { // Handles game memory process.
 			    return mEntry;
 		    }
 	    while (Module32Next(hModule, &mEntry));
- 
-            CloseHandle(hModule);
+        CloseHandle(hModule);
 	    mEntry.modBaseAddr = 0x0;
 	    return mEntry;
     }
 
-    // Implement Read and Write functions next
+    template<class c>
+	c Read(DWORD dwAddress){ // Read Function.
+		c val;
+		ReadProcessMemory(hProcess, (LPVOID)dwAddress, &val, sizeof(c), NULL);
+		return val;
+	}
+ 	template<class c>
+	BOOL Write(DWORD dwAddress, c ValueToWrite) { // Write Function.
+	return WriteProcessMemory(hProcess, (LPVOID)dwAddress, &ValueToWrite, sizeof(c), NULL);
+	}
+
+	// Fix possible memory leaks, write constructor/deconstructors, getters for instance vars
 
 };
