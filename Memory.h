@@ -1,8 +1,8 @@
 #pragma once // Compile only once.
  
-#include <Windows.h> //Contains WinAPI Functions to read/write into the game's process.
+#include <Windows.h> // Contains WinAPI Functions to read/write into the game's process.
  
-#include <TlHelp32.h> //Contains functions useful for retrieving modules (.dll) from the game.
+#include <TlHelp32.h> // Contains functions useful for retrieving modules (.dll) from the game.
  
 class Memory { // Handles game memory process.
 
@@ -25,8 +25,7 @@ class Memory { // Handles game memory process.
 	    procNameChar = new WCHAR[nChars];
 	    MultiByteToWideChar(CP_ACP, 0, ProcessName, -1, (LPWSTR)procNameChar, nChars);
 	    do
-		    if (!wcscmp(procEntry.szExeFile, procNameChar))
-		    {
+		    if (!wcscmp(procEntry.szExeFile, procNameChar)) {
 			    this->dwPID = procEntry.th32ProcessID;
 			    CloseHandle(hPID);
 			    this->hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, this->dwPID);
@@ -46,8 +45,7 @@ class Memory { // Handles game memory process.
             modNameChar = new WCHAR[nChars];
             MultiByteToWideChar(CP_ACP, 0, ModuleName, -1, (LPWSTR)modNameChar, nChars);
 	    do
-		    if (!wcscmp(mEntry.szModule, modNameChar))
-		    {
+		    if (!wcscmp(mEntry.szModule, modNameChar)) {
 			    CloseHandle(hModule);
 			    return mEntry;
 		    }
@@ -79,13 +77,16 @@ class Memory { // Handles game memory process.
 		this->hProc = NULL;
 		this->dwPID = NULL;
 		try { // Retrieves memory process and modules of running game.
-			if (!AttachProcess("csgo.exe")) throw 1;
+			if (!AttachProcess("csgo.exe")) 
+				throw 1;
 			this->ClientDLL = GetModule("client.dll");
 			this->EngineDLL = GetModule("engine.dll");
 			this->ClientDLL_Base = (DWORD)this->ClientDLL.modBaseAddr;
 			this->EngineDLL_Base = (DWORD)this->EngineDLL.modBaseAddr;
-			if (this->ClientDLL_Base == 0x0) throw 2;
-			if (this->EngineDLL_Base == 0x0) throw 3;
+			if (this->ClientDLL_Base == 0x0) 
+				throw 2;
+			if (this->EngineDLL_Base == 0x0) 
+				throw 3;
 			this->ClientDLL_Size = this->ClientDLL.dwSize;
 			this->EngineDLL_Size = this->EngineDLL.dwSize;
 		} catch (int iEx) { // Close program if error conditions met.
