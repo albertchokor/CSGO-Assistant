@@ -1,0 +1,197 @@
+#include "Memory.h"
+#include <iostream>
+#include <TlHelp32.h>
+ 
+Memory* Mem; // Execute memory manager in main entry point.
+ 
+// Offsets for future/other functions.
+#define localPlayer = 0xCBD6B4;
+#define entityList = 0x4CCDBFC;
+#define iTeamNum = 0xF4;
+#define bSpotted = 0x93D;
+#define iGlowIndex = 0xA3F8;
+#define objectGlowManager = 0x520DA28;
+#define flashDuration = 0xA3E0;
+#define modelAmbientMin = 0x58ED1C;
+#define crosshairID = 0xB390;
+#define fireWeapon = 0x30FF2A0;
+#define fovOf = 0x31E4;
+#define viewAngle = 0x3020;
+#define aimAngle = 0x302C;
+#define weaponScoped = 0x390A;
+#define render = 0x70;
+#define iHealth = 0x100;
+
+// Offsets for ESP.
+#define viewMatrix = 0x4CF6534;
+#define boneMatrix = 0x26A8;
+#define position = 0x138;
+#define bDormant = 0xED;
+
+struct Vec2 { // Vec2 stores screen 2D x, y coordinates.
+    float x, y;
+};
+
+struct Vec3 // Vec3 stores player position.
+{
+    float x, y, z;
+};
+
+struct Vec4 // Vec4 stores clip coordinates.
+{
+    float x, y, z, w;
+};
+
+struct entity { // Read & store entity info into entity array.
+    DWORD currentEntity = main.currentEntity;
+    DWORD bone;
+    Vec3 entPos;
+    Vec3 entBonePos;
+    int team;
+    int health;
+    int dormant;
+    void ReadentityInfo(int player) {
+        ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.entitylist + main.localPlayer * 0x10), &currentEntity, sizeof(currentEntity), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(currentEntity + game.dw_position), &entPos, sizeof(entPos), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(main.currentEntity + main.boneMatrix), &bone, sizeof(bone), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (Vec3*)(bone + 0x30 * 9 + 0x0C), &entBonePos.x, sizeof(entBonePos.x), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (Vec3*)(bone + 0x30 * 9 + 0x1C), &entBonePos.y, sizeof(entBonePos.y), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (Vec3*)(bone + 0x30 * 9 + 0x2C), &entBonePos.z, sizeof(entBonePos.z), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPINT)(currentEntity + main.iTeamNum), &team, sizeof(team), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPINT)(currentEntity + main.iHealth), &health, sizeof(health), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPINT)(entityList + main.bDormant), &dormant, sizeof(dormant), 0);
+    }
+}PlayerList[64]; // Array of players.
+
+struct me { // Read & Store user info (My team and entity).
+    DWORD Player;
+    int Team;
+    void ReadMyINFO()
+    {
+        ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &Player, sizeof(Player), 0);
+        ReadProcessMemory(Mem.getProcHandle(), (LPINT)(Player + main.iTeamNum), &Team, sizeof(Team), 0);
+    }
+}Me;
+
+float ScreenX = GetSystemMetrics(SM_CXSCREEN); // Get Width of screen for ESP.
+float ScreenY = GetSystemMetrics(SM_CYSCREEN); // Get Height of screen for ESP.
+
+struct playerESP { // Variables For ESP (Box Drawing, Game window, Entity Info).
+    HBRUSH Brush;
+    HFONT Font;
+    HDC gameWindow;
+    HWND game;
+    COLORREF textColor;
+    HPEN snapLineColor;
+}esp;
+
+// ESP Functions.
+
+void DrawFilledRect(int x, int y, int w, int h) {
+    RECT rect = { x, y, x + w, y + h };
+    FillRect(esp.gameWindow, &rect, esp.Brush);
+}
+
+void DrawBorderBox(int x, int y, int w, int h, int thickness) { // Draws box.
+    DrawFilledRect(x, y, w, thickness); // Bottom Horizontal Line.
+    DrawFilledRect(x, y, thickness, h); // Right Vertical Line.
+    DrawFilledRect((x + w), y, thickness, h); // Left Vertical Line.
+    DrawFilledRect(x, y + h, w + thickness, thickness); // Top Horizontal Line.
+}
+
+void DrawLine(int x, int y, HPEN LineColor) { // Draws the Snaplines.
+    MoveToEx(esp.gameWindow, (ScreenX/2), (ScreenY/2), NULL);
+    LineTo(esp.gameWindow, x, y);
+    esp.snapLineColor = CreatePen(PS_SOLID, 1, RGB(0, 255, 255));
+    SelectObject(esp.gameWindow, esp.snapLineColor);
+}
+
+void DrawString(int x, int y, COLORREF color, const char* text) { // Draws the text on screen.
+    SetTextAlign(esp.gameWindow, TA_CENTER | TA_NOUPDATECP); //TA_NOUPDATECP: The current position is not updated after each text output call.
+    SetBkColor(esp.gameWindow, RGB(0, 0, 0));
+    SetBkMode(esp.gameWindow, TRANSPARENT); // TRANSPARENT: Background remains untouched.
+    SetTextColor(esp.gameWindow, color);
+    SelectObject(esp.gameWindow, esp.Font);
+    TextOutA(esp.gameWindow, x, y, text, strlen(text));
+    DeleteObject(esp.Font);
+}
+
+bool WorldToScreen(Vec3 pos, Vec2 &screen, float matrix[16], int windowWidth, int windowHeight) { // converts 3D location coordinates to 2D for player screen.
+    // Matrix-vector Product, multiplying world(eye) coordinates by projection matrix = clipCoords.
+    Vec4 clipCoords;
+    clipCoords.x = pos.x*matrix[0] + pos.y*matrix[1] + pos.z*matrix[2] + matrix[3];
+    clipCoords.y = pos.x*matrix[4] + pos.y*matrix[5] + pos.z*matrix[6] + matrix[7];
+    clipCoords.z = pos.x*matrix[8] + pos.y*matrix[9] + pos.z*matrix[10] + matrix[11];
+    clipCoords.w = pos.x*matrix[12] + pos.y*matrix[13] + pos.z*matrix[14] + matrix[15];
+    if (clipCoords.w < 0.1f) // Don't draw if located behind player POV.
+        return false;
+
+    Vec3 NDC;
+    // Normalize coordinates.
+    NDC.x = clipCoords.x / clipCoords.w;
+    NDC.y = clipCoords.y / clipCoords.w;
+    NDC.z = clipCoords.z / clipCoords.w;
+    // Convert to window/screen coordinates (x, y).
+    screen.x = (windowWidth / 2 * NDC.x) + (NDC.x + windowWidth / 2);
+    screen.y = -(windowHeight / 2 * NDC.y) + (NDC.y + windowHeight / 2);
+    return true;
+}
+
+void playerESP() { // Main ESP Function, reads through entities and draws boxes and player info on them.
+    Vec2 vHead;
+    Vec2 vScreen;
+    float Matrix[16]; // [4][4]: 4*4 = 16
+    ReadProcessMemory(Mem.getProcHandle(), (PFLOAT)(Mem.ClientDLL + main.viewMatrix), &Matrix, sizeof(Matrix), 0);
+    for (int i = 0; i < 64; i++) { // Loops through all entities.
+        PlayerList[i].ReadentityInfo(i);
+        Me.ReadMyINFO();
+        if (PlayerList[i].currentEntity != NULL) {
+            if (PlayerList[i].currentEntity != Me.Player) {
+                if (PlayerList->dormant == 0) { // Checks if players are being updated by server.
+                    if (PlayerList[i].health > 0) { // Checks if entities are alive.
+                        if (WorldToScreen(PlayerList[i].entPos, vScreen, Matrix, ScreenX, ScreenY)) {
+                            if (WorldToScreen(PlayerList[i].entBonePos, vHead, Matrix, ScreenX, ScreenY)) {
+                                // ESP Box Size Calculations.
+                                float head = vHead.y - vScreen.y;
+                                float width = head / 2;
+                                float center = width / -2;
+                                if (PlayerList[i].Team == Me.Team) { // Draws Team ESP Boxes.
+                                    esp.Brush = CreateSolidBrush(RGB(0, 0, 255));
+                                    DrawBorderBox(vScreen.x + center, vScreen.y, width, head - 5, 2);
+                                    DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
+                                    esp.textColor = RGB(0, 255, 0);
+                                    char Healthchar[255];
+                                    sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health));
+                                    DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
+                                    DeleteObject(esp.Brush);
+                                } else { // Draws Enemy ESP Boxes.
+                                    esp.Brush = CreateSolidBrush(RGB(255, 0, 0));
+                                    DrawBorderBox(vScreen.x + center, vScreen.y, width, head, 2);
+                                    DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
+                                    DeleteObject(esp.Brush);
+                                    esp.textColor = RGB(0, 255, 0);
+                                    char Healthchar[255];
+                                    sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health)); // Prints health value of enemy.
+                                    DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+int main() { // Main process.
+    SetConsoleTitleA("CSGO Assistant");
+    Mem = new MemoryManager();
+    esp.game = FindWindowA(0, "Counter-Strike: Global Offensive"); // Gets game window for ESP feature.
+    esp.gameWindow = GetDC(esp.game);
+    while (Mem.getProcID() != NULL) { // Run ESP for now until game closes.
+        playerESP();
+    }
+    CloseHandle(Mem.getProcHandle());
+    delete Mem; // Deletes Memory Manager pointer to execute destructor/close hProc.
+    return 0;
+}

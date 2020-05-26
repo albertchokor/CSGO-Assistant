@@ -79,7 +79,7 @@ class Memory { // Handles game memory process.
 		try { // Retrieves memory process and modules of running game.
 			if (!AttachProcess("csgo.exe")) 
 				throw 1;
-			this->ClientDLL = GetModule("client.dll");
+			this->ClientDLL = GetModule("client_panorama.dll"); // Use panorama if using panorama client, else use client.dll.
 			this->EngineDLL = GetModule("engine.dll");
 			this->ClientDLL_Base = (DWORD)this->ClientDLL.modBaseAddr;
 			this->EngineDLL_Base = (DWORD)this->EngineDLL.modBaseAddr;
