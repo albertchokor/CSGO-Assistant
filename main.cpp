@@ -34,37 +34,6 @@ Memory* Mem; // Execute memory manager in main entry point.
 // No Flash Offset.
 #define flashDuration = 0xA3F4;
 
-// To press key and toggle triggerbot function on/off.
-boolean triggerToggled = false;
-
-// Trigger Bot Main Function: Attack automatically if enemy is in player's crosshair.
-void triggerBot() {
-    // Check for toggle on/off.
-    if (GetAsyncKeyState(VK_F1)) { // If pressed F1 key, toggle on/off.
-        triggerToggled = !triggerToggled;
-        Sleep(200); // So pressing key doesn't switch on/off the moment it presses.
-    }
-	// If the triggerbot toggled, proceed triggerbot.
-	if (triggerToggled) {
-        // Retrieve player information.
-		DWORD LocalPlayer_Base = Mem->Read<DWORD>(Mem->ClientDLL_Base + m_dwLocalPlayer);
-		int localPlayerInCross = Mem->Read<int>(LocalPlayer_Base + main.iCrossHairID); // Checks entity in player's crosshair.
-		int localPlayerTeam = Mem->Read<int>(LocalPlayer_Base + main.iTeamNum); // Gets their team. (Want to check team before activating).
-        // Retrieve the EntityBase, using dwEntityList.
-        DWORD triggerEntityBase = Mem->Read<DWORD>(Mem->ClientDLL_Base + main.entityList + ((LocalPlayer_inCross - 1)*0x10));
-        int triggerEntityTeam = Mem->Read<int>(triggerEntityBase + main.iTeamNum);
-        bool triggerEntityDormant = Mem->Read<bool>(triggerEntityBase + main.bDormant);
-        // If in enemy entity is in the player crosshair, attack automatically.
-        if ((localPlayerInCross > 0 && localPlayerInCross <= 64) && (triggerEntityBase != NULL) && (triggerEntityTeam != localPlayerTeam) && (!triggerEntityDormant)) {
-            Sleep(10); // Delay before attacking to make sure not to shoot short of the enemy (Make sure is in entity "blob").
-            mouse_event(MOUSEEVENTF_LEFTDOWN,NULL,NULL,NULL,NULL); // Mouse left click shoot.
-            Sleep(10); // Delay between shots.
-            mouse_event(MOUSEEVENTF_LEFTUP, NULL, NULL, NULL, NULL); // Mouse left click release.
-            Sleep(10); // Delay after shooting.
-        }
-    }
-}
-
 struct Vec2 { // Vec2 stores screen 2D x, y coordinates.
     float x, y;
 };
@@ -228,19 +197,59 @@ void playerESP() { // Main ESP Function, reads through entities and draws boxes 
     }
 }
 
-void NoFlash() { // Simple No Flash Function (No Player Blinding from Flash Utility).
-    DWORD myEntity; // Represents your player.
-    int flashDuration;
-    int noFlashVal = 0;
-    ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
-    if (myEntity == NULL) {
-        while (myEntity == NULL) {
-            ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
+// To press key and toggle no flash function on/off.
+boolean noFlashToggled = false;
+
+void noFlash() { // Simple No Flash Function (No Player Blinding from Flash Utility).
+    if (GetAsyncKeyState(VK_F3)) { // If pressed F3 key, toggle on/off.
+        noFlashToggled = !noFlashToggled;
+        Sleep(200); // So pressing key doesn't switch on/off the moment it presses.
+    }
+    if(noFlashToggled){
+        DWORD myEntity; // Represents your player.
+        int flashDuration;
+        int noFlashVal = 0;
+        ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
+        if (myEntity == NULL) {
+            while (myEntity == NULL) {
+                ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
+            }
+        }
+        ReadProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &flashDuration, sizeof(flashDuration), 0);
+        if (flashDuration > 0) { // Cancels out flash blinding.
+            WriteProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &noFlashVal, sizeof(noFlashVal), 0);
         }
     }
-    ReadProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &flashDuration, sizeof(flashDuration), 0);
-    if (flashDuration > 0) { // Cancels out flash blinding.
-        WriteProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &noFlashVal, sizeof(noFlashVal), 0);
+}
+
+// To press key and toggle triggerbot function on/off.
+boolean triggerToggled = false;
+
+// Trigger Bot Main Function: Attack automatically if enemy is in player's crosshair.
+void triggerBot() {
+    // Check for toggle on/off.
+    if (GetAsyncKeyState(VK_F1)) { // If pressed F1 key, toggle on/off.
+        triggerToggled = !triggerToggled;
+        Sleep(200); // So pressing key doesn't switch on/off the moment it presses.
+    }
+    // If the triggerbot toggled, proceed triggerbot.
+    if (triggerToggled) {
+        // Retrieve player information.
+        DWORD LocalPlayer_Base = Mem->Read<DWORD>(Mem->ClientDLL_Base + m_dwLocalPlayer);
+        int localPlayerInCross = Mem->Read<int>(LocalPlayer_Base + main.iCrossHairID); // Checks entity in player's crosshair.
+        int localPlayerTeam = Mem->Read<int>(LocalPlayer_Base + main.iTeamNum); // Gets their team. (Want to check team before activating).
+        // Retrieve the EntityBase, using dwEntityList.
+        DWORD triggerEntityBase = Mem->Read<DWORD>(Mem->ClientDLL_Base + main.entityList + ((LocalPlayer_inCross - 1)*0x10));
+        int triggerEntityTeam = Mem->Read<int>(triggerEntityBase + main.iTeamNum);
+        bool triggerEntityDormant = Mem->Read<bool>(triggerEntityBase + main.bDormant);
+        // If in enemy entity is in the player crosshair, attack automatically.
+        if ((localPlayerInCross > 0 && localPlayerInCross <= 64) && (triggerEntityBase != NULL) && (triggerEntityTeam != localPlayerTeam) && (!triggerEntityDormant)) {
+            Sleep(10); // Delay before attacking to make sure not to shoot short of the enemy (Make sure is in entity "blob").
+            mouse_event(MOUSEEVENTF_LEFTDOWN,NULL,NULL,NULL,NULL); // Mouse left click shoot.
+            Sleep(10); // Delay between shots.
+            mouse_event(MOUSEEVENTF_LEFTUP, NULL, NULL, NULL, NULL); // Mouse left click release.
+            Sleep(10); // Delay after shooting.
+        }
     }
 }
 
@@ -249,8 +258,9 @@ int main() { // Main process.
     Mem = new MemoryManager();
     esp.game = FindWindowA(0, "Counter-Strike: Global Offensive"); // Gets game window for ESP feature.
     esp.gameWindow = GetDC(esp.game);
-    while (Mem.getProcID() != NULL) { // Runs playerESP and triggerBot that user can toggle on and off until game application closes.
+    while (Mem.getProcID() != NULL) { // Runs playerESP, noFlash, and triggerBot that user can toggle on and off until game application closes.
         playerESP();
+        noFlash();
         triggerBot();
     }
     CloseHandle(Mem.getProcHandle());
