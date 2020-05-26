@@ -31,6 +31,9 @@ Memory* Mem; // Execute memory manager in main entry point.
 // TriggerBot Offsets.
 #define iCrossHairID 0xA940
 
+// No Flash Offset.
+#define flashDuration = 0xA3F4;
+
 // To press key and toggle triggerbot function on/off.
 boolean triggerToggled = false;
 
@@ -159,7 +162,6 @@ bool WorldToScreen(Vec3 pos, Vec2 &screen, float matrix[16], int windowWidth, in
     clipCoords.w = pos.x*matrix[12] + pos.y*matrix[13] + pos.z*matrix[14] + matrix[15];
     if (clipCoords.w < 0.1f) // Don't draw if located behind player POV.
         return false;
-
     Vec3 NDC;
     // Normalize coordinates.
     NDC.x = clipCoords.x / clipCoords.w;
@@ -223,6 +225,22 @@ void playerESP() { // Main ESP Function, reads through entities and draws boxes 
                 }
             }
         }
+    }
+}
+
+void NoFlash() { // Simple No Flash Function (No Player Blinding from Flash Utility).
+    DWORD myEntity; // Represents your player.
+    int flashDuration;
+    int noFlashVal = 0;
+    ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
+    if (myEntity == NULL) {
+        while (myEntity == NULL) {
+            ReadProcessMemory(Mem.getProcHandle(), (LPVOID)(Mem.ClientDLL + main.localPlayer), &myEntity, sizeof(myEntity), 0);
+        }
+    }
+    ReadProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &flashDuration, sizeof(flashDuration), 0);
+    if (flashDuration > 0) { // Cancels out flash blinding.
+        WriteProcessMemory(Mem.getProcHandle(), (LPINT)(myEntity + main.flashDuration), &noFlashVal, sizeof(noFlashVal), 0);
     }
 }
 
