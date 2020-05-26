@@ -28,6 +28,40 @@ Memory* Mem; // Execute memory manager in main entry point.
 #define position = 0x138;
 #define bDormant = 0xED;
 
+// TriggerBot Offsets.
+#define iCrossHairID 0xA940
+
+// To press key and toggle triggerbot function on/off.
+boolean triggerToggled = false;
+
+// Trigger Bot Main Function: Attack automatically if enemy is in player's crosshair.
+void triggerBot() {
+    // Check for toggle on/off.
+    if (GetAsyncKeyState(VK_F1)) { // If pressed F1 key, toggle on/off.
+        triggerToggled = !triggerToggled;
+        Sleep(200); // So pressing key doesn't switch on/off the moment it presses.
+    }
+	// If the triggerbot toggled, proceed triggerbot.
+	if (triggerToggled) {
+        // Retrieve player information.
+		DWORD LocalPlayer_Base = Mem->Read<DWORD>(Mem->ClientDLL_Base + m_dwLocalPlayer);
+		int localPlayerInCross = Mem->Read<int>(LocalPlayer_Base + main.iCrossHairID); // Checks entity in player's crosshair.
+		int localPlayerTeam = Mem->Read<int>(LocalPlayer_Base + main.iTeamNum); // Gets their team. (Want to check team before activating).
+        // Retrieve the EntityBase, using dwEntityList.
+        DWORD triggerEntityBase = Mem->Read<DWORD>(Mem->ClientDLL_Base + main.entityList + ((LocalPlayer_inCross - 1)*0x10));
+        int triggerEntityTeam = Mem->Read<int>(triggerEntityBase + main.iTeamNum);
+        bool triggerEntityDormant = Mem->Read<bool>(triggerEntityBase + main.bDormant);
+        // If in enemy entity is in the player crosshair, attack automatically.
+        if ((localPlayerInCross > 0 && localPlayerInCross <= 64) && (triggerEntityBase != NULL) && (triggerEntityTeam != localPlayerTeam) && (!triggerEntityDormant)) {
+            Sleep(10); // Delay before attacking to make sure not to shoot short of the enemy (Make sure is in entity "blob").
+            mouse_event(MOUSEEVENTF_LEFTDOWN,NULL,NULL,NULL,NULL); // Mouse left click shoot.
+            Sleep(10); // Delay between shots.
+            mouse_event(MOUSEEVENTF_LEFTUP, NULL, NULL, NULL, NULL); // Mouse left click release.
+            Sleep(10); // Delay after shooting.
+        }
+    }
+}
+
 struct Vec2 { // Vec2 stores screen 2D x, y coordinates.
     float x, y;
 };
@@ -137,42 +171,51 @@ bool WorldToScreen(Vec3 pos, Vec2 &screen, float matrix[16], int windowWidth, in
     return true;
 }
 
+// To press key and toggle player ESP function on/off.
+boolean playerESPToggled = false;
+
 void playerESP() { // Main ESP Function, reads through entities and draws boxes and player info on them.
-    Vec2 vHead;
-    Vec2 vScreen;
-    float Matrix[16]; // [4][4]: 4*4 = 16
-    ReadProcessMemory(Mem.getProcHandle(), (PFLOAT)(Mem.ClientDLL + main.viewMatrix), &Matrix, sizeof(Matrix), 0);
-    for (int i = 0; i < 64; i++) { // Loops through all entities.
-        PlayerList[i].ReadentityInfo(i);
-        Me.ReadMyINFO();
-        if (PlayerList[i].currentEntity != NULL) {
-            if (PlayerList[i].currentEntity != Me.Player) {
-                if (PlayerList->dormant == 0) { // Checks if players are being updated by server.
-                    if (PlayerList[i].health > 0) { // Checks if entities are alive.
-                        if (WorldToScreen(PlayerList[i].entPos, vScreen, Matrix, ScreenX, ScreenY)) {
-                            if (WorldToScreen(PlayerList[i].entBonePos, vHead, Matrix, ScreenX, ScreenY)) {
-                                // ESP Box Size Calculations.
-                                float head = vHead.y - vScreen.y;
-                                float width = head / 2;
-                                float center = width / -2;
-                                if (PlayerList[i].Team == Me.Team) { // Draws Team ESP Boxes.
-                                    esp.Brush = CreateSolidBrush(RGB(0, 0, 255));
-                                    DrawBorderBox(vScreen.x + center, vScreen.y, width, head - 5, 2);
-                                    DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
-                                    esp.textColor = RGB(0, 255, 0);
-                                    char Healthchar[255];
-                                    sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health));
-                                    DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
-                                    DeleteObject(esp.Brush);
-                                } else { // Draws Enemy ESP Boxes.
-                                    esp.Brush = CreateSolidBrush(RGB(255, 0, 0));
-                                    DrawBorderBox(vScreen.x + center, vScreen.y, width, head, 2);
-                                    DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
-                                    DeleteObject(esp.Brush);
-                                    esp.textColor = RGB(0, 255, 0);
-                                    char Healthchar[255];
-                                    sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health)); // Prints health value of enemy.
-                                    DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
+    if (GetAsyncKeyState(VK_F2)) { // If pressed F2 key, toggle on/off.
+        playerESPToggled = !playerESPToggled;
+        Sleep(200); // So pressing key doesn't switch on/off the moment it presses.
+    }
+    if(playerESPToggled) { // Draw ESP boxes + player info if playerESP is toggled on.
+        Vec2 vHead;
+        Vec2 vScreen;
+        float Matrix[16]; // [4][4]: 4*4 = 16
+        ReadProcessMemory(Mem.getProcHandle(), (PFLOAT)(Mem.ClientDLL + main.viewMatrix), &Matrix, sizeof(Matrix), 0);
+        for (int i = 0; i < 64; i++) { // Loops through all entities.
+            PlayerList[i].ReadentityInfo(i);
+            Me.ReadMyINFO();
+            if (PlayerList[i].currentEntity != NULL) {
+                if (PlayerList[i].currentEntity != Me.Player) {
+                    if (PlayerList->dormant == 0) { // Checks if players are being updated by server.
+                        if (PlayerList[i].health > 0) { // Checks if entities are alive.
+                            if (WorldToScreen(PlayerList[i].entPos, vScreen, Matrix, ScreenX, ScreenY)) {
+                                if (WorldToScreen(PlayerList[i].entBonePos, vHead, Matrix, ScreenX, ScreenY)) {
+                                    // ESP Box Size Calculations.
+                                    float head = vHead.y - vScreen.y;
+                                    float width = head / 2;
+                                    float center = width / -2;
+                                    if (PlayerList[i].Team == Me.Team) { // Draws Team ESP Boxes.
+                                        esp.Brush = CreateSolidBrush(RGB(0, 0, 255));
+                                        DrawBorderBox(vScreen.x + center, vScreen.y, width, head - 5, 2);
+                                        DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
+                                        esp.textColor = RGB(0, 255, 0);
+                                        char Healthchar[255];
+                                        sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health));
+                                        DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
+                                        DeleteObject(esp.Brush);
+                                    } else { // Draws Enemy ESP Boxes.
+                                        esp.Brush = CreateSolidBrush(RGB(255, 0, 0));
+                                        DrawBorderBox(vScreen.x + center, vScreen.y, width, head, 2);
+                                        DrawLine(vScreen.x, vScreen.y, esp.snapLineColor);
+                                        DeleteObject(esp.Brush);
+                                        esp.textColor = RGB(0, 255, 0);
+                                        char Healthchar[255];
+                                        sprintf_s(Healthchar, sizeof(Healthchar), "Health: %i", (int)(PlayerList[i].health)); // Prints health value of enemy.
+                                        DrawString(vScreen.x, vScreen.y, esp.textColor, Healthchar);
+                                    }
                                 }
                             }
                         }
@@ -188,8 +231,9 @@ int main() { // Main process.
     Mem = new MemoryManager();
     esp.game = FindWindowA(0, "Counter-Strike: Global Offensive"); // Gets game window for ESP feature.
     esp.gameWindow = GetDC(esp.game);
-    while (Mem.getProcID() != NULL) { // Run ESP for now until game closes.
+    while (Mem.getProcID() != NULL) { // Runs playerESP and triggerBot that user can toggle on and off until game application closes.
         playerESP();
+        triggerBot();
     }
     CloseHandle(Mem.getProcHandle());
     delete Mem; // Deletes Memory Manager pointer to execute destructor/close hProc.
