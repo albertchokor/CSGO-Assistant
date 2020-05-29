@@ -281,7 +281,72 @@ void autoHop() { // AutoHop Function: Automatically jumps/bhops when holding spa
 }
 
 void aimbot() { // Aimbot Function: Automatically assist player in aiming crosshair to enemy.
-    // Check enemy in view, Calculate angles to enemy bones, Shift mouse to target bone, Track on screen unless toggled off.
+    // Make entity loop and execute world to screen function to snap onto enemy in range.
+}
+
+boolean smooth = false; // Smoother variable.
+
+void aimAtPos() { // Helper Function to move mouse to enemy in range.
+    int distMax = 75;  // Max Distance from crosshair an enemy will be targeted.
+    double lowDist = distMax;
+    float aimPosX = 1920 / 2; // X Position of crosshair on screen. (Change these values if screen resolution is different)
+    float aimPosY = 1080 / 2; // Y Position of crosshair on screen.
+    float screenCenterX = (this.Width / 2);
+    float screenCenterY = (this.Height / 2);
+    float targetX = 0;
+    float targetY = 0;
+    // Calculate mouse angles.
+    if (x != 0) {
+        if (x > screenCenterX) {
+            targetX = -(screenCenterX - x);
+            targetX /= AimSpeed;
+            if (targetX + screenCenterX > screenCenterX * 2)
+                targetX = 0;
+        }
+        if (x < screenCenterX) {
+            targetX = x - screenCenterX;
+            targetX /= AimSpeed;
+            if (targetX + screenCenterX < 0) 
+                targetX = 0;
+        }
+    }
+    if (y != 0) {
+        if (y > screenCenterY) {
+            targetY = -(screenCenterY - y);
+            targetY /= AimSpeed;
+            if (targetY + screenCenterY > screenCenterY * 2) 
+                targetY = 0;
+        }
+        if (y < screenCenterY) {
+            targetY = y - screenCenterY;
+            targetY /= AimSpeed;
+            if (targetY + screenCenterY < 0) 
+                targetY = 0;
+        }
+    }
+    if (!smooth) {
+        mouse_event(0x0001, (uint)(targetX), (uint)(targetY), NULL, NULLPTR);
+        return;
+    }
+    targetX /= 10;
+    targetY /= 10;
+    if (Math.Abs(targetX) < 1) {
+        if (targetX > 0) {
+            targetX = 1;
+        }
+        if (targetX < 0) {
+            targetX = -1;
+        }
+    }
+    if (Math.Abs(targetY) < 1) {
+        if (targetY > 0) {
+            targetY = 1;
+        }
+        if (targetY < 0) {
+            targetY = -1;
+        }
+    }
+    mouse_event(0x0001, (uint)targetX, (uint)targetY, NULL, NULLPTR);
 }
 
 int main() { // Main process.
