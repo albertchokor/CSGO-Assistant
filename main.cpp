@@ -21,6 +21,7 @@ Memory* Mem; // Execute memory manager in main entry point.
 #define weaponScoped = 0x390A;
 #define render = 0x70;
 #define iHealth = 0x100;
+#define visibleEnemy = 0x38HD0291;
 
 // Offsets for ESP.
 #define viewMatrix = 0x4CF6534;
@@ -280,11 +281,81 @@ void autoHop() { // AutoHop Function: Automatically jumps/bhops when holding spa
     }
 }
 
-void aimbot() { // Aimbot Function: Automatically assist player in aiming crosshair to enemy.
-    // Make entity loop and execute world to screen function to snap onto enemy in range.
-}
+// Aimbot Functions.
 
+DWORD playerToAim;
+float aimFOV;
+bool isAimbotting;
 boolean smooth = false; // Smoother variable.
+
+float distanceBetweenCross(float X, float Y) { // Helper method to calculate hypotenuse distance from x, y to crosshair (middle).
+    float yDist = (Y - GetSystemMetrics(SM_CYSCREEN) / 2);
+    float xDist = (X - GetSystemMetrics(SM_CXSCREEN) / 2);
+    float hypotenuse = sqrt(pow(yDist,2) + pow(xDist,2));
+    return hypotenuse;
+}
+ 
+bool getAimKey() {
+    return (GetAsyncKeyState(VK_LBUTTON));
+}
+ 
+void getClosestPlayerToCrossHair(IClientEntity* Player, float &max, float aimFOV) { // Helper function to retrieve closest enemy entity from crosshair if any.
+    if(!getAimKey() || !isAimbotting) {
+        if (visibleEnemy) {
+            Vector head;
+            Vector w2sHead;
+            head = cEng.GetEyePosition(visibleEnemy);
+            if(cEng.GetBonePosition(visibleEnemy, head, 10)) { // Calculates smallest distances between visible enemies and crosshair if any.
+                cMath.WorldToScreen(head, w2sHead);
+                float dist = distanceBetweenCross(w2sHead.X, w2sHead.Y);            
+                if(dist < max) { // Updates smallest hypotenuse.
+                    max = dist;
+                    playerToAim = visibleEnemy;
+                    aimFOV = aimFOV;
+                }
+            }
+        }
+    }
+ 
+}
+ 
+void aimAt(IClientEntity* plr) { // Helper function to aim at chosen/enemy/targeted entity.
+    if(plr) {
+        if(!cEng.IsAlive(plr)) {
+            isAimbotting = false;
+            return;
+        }
+        Vector head;
+        Vector w2sHead;
+        //Head = cEng.GetEyePosition(plr); // Testing entity line.
+        if(cEng.GetBonePosition(plr, head, 10)) {
+            cMath.WorldToScreen(head, w2sHead);
+            if(w2sHead.Y != 0 || w2sHead.X != 0) {
+                if ((distanceBetweenCross(w2sHead.X, w2sHead.Y) <= aimFOV*8) || isAimbotting) { // Aims at head bone of enemy.
+                    isAimbotting = true;
+                    aimAtPos(w2sHead.X, w2sHead.Y); // Aims at head position.
+                }
+            }
+        }
+    }
+}
+ 
+void aimbot() { // Main aimbot function: Moves crosshair to closest enemy entity when toggled on.
+    static bool aimbotON = false;
+    if(GetAsyncKeyState(VK_DELETE) & 1) // Toggles on aimbot.
+        aimbotON = !aimbotON;
+    if(GetAsyncKeyState(VK_INSERT) & 1) // Toggles on smoothing for aimbot.
+        smooth = !smooth;
+    if(aimbotON) { // If aimbot on and aim key pressed, aims at closest enemy entity.
+        if((playerToAim != 0)) {
+            if(GetAimKey()) {
+                AimAt(playerToAim);
+            } else {
+                isAimbotting = false;
+            }
+        }
+    }
+}
 
 void aimAtPos() { // Helper Function to move mouse to enemy in range.
     int distMax = 75;  // Max Distance from crosshair an enemy will be targeted.
@@ -295,7 +366,7 @@ void aimAtPos() { // Helper Function to move mouse to enemy in range.
     float screenCenterY = (this.Height / 2);
     float targetX = 0;
     float targetY = 0;
-    // Calculate mouse angles.
+    // Calculate mouse angles and target position relative to pixels.
     if (x != 0) {
         if (x > screenCenterX) {
             targetX = -(screenCenterX - x);
@@ -346,7 +417,7 @@ void aimAtPos() { // Helper Function to move mouse to enemy in range.
             targetY = -1;
         }
     }
-    mouse_event(0x0001, (uint)targetX, (uint)targetY, NULL, NULLPTR);
+    mouse_event(0x0001, (uint)targetX, (uint)targetY, NULL, NULLPTR); // Moves mouse pointer.
 }
 
 int main() { // Main process.
@@ -354,11 +425,12 @@ int main() { // Main process.
     Mem = new MemoryManager();
     esp.game = FindWindowA(0, "Counter-Strike: Global Offensive"); // Gets game window for ESP feature.
     esp.gameWindow = GetDC(esp.game);
-    while (Mem.getProcID() != NULL) { // Runs playerESP, noFlash, triggerBot, and autoHop that the user can toggle on and off until game application closes.
+    while (Mem.getProcID() != NULL) { // Runs playerESP, noFlash, triggerBot, autoHop, and aimbot that the user can toggle on and off until game application closes.
         playerESP();
         noFlash();
         triggerBot();
         autoHop();
+        aimbot();
     }
     CloseHandle(Mem.getProcHandle());
     delete Mem; // Deletes Memory Manager pointer to execute destructor/close hProc.
